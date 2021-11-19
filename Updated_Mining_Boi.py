@@ -25,41 +25,51 @@ def get_commit_prod(repo_list, language):
         team_wd = 444
 
         is_first_commit = True
-        for commit in Repository(repo).traverse_commits():
-            try:
-                author_email = commit.author.email
-                author_name = commit.author.name
-                date = commit.committer_date
+        activate = False
+        r = ""
+        try:
+            r = Repository(repo).traverse_commits()
+        except Exception as error:
+            print("[Pydriller] " + repo + " skipped due to unexpected error.", error)
+            continue
+        try:
+            for commit in r:
+                try:
+                    author_email = commit.author.email
+                    author_name = commit.author.name
+                    date = commit.committer_date
 
-                author_dict.update({author_email: author_name})
-                commit_num += 1
-                end_date = date
+                    author_dict.update({author_email: author_name})
+                    commit_num += 1
+                    end_date = date
 
-                if is_first_commit:
-                    from_date = date
-                    is_first_commit = False
+                    if is_first_commit:
+                        from_date = date
+                        is_first_commit = False
 
-                author_lcd_dict.update({author_email: date})
-                pop_list = []
-                for email in author_lcd_dict.keys():
-                    if (date - author_lcd_dict[email]).total_seconds() > team_wd*60*60*24:
-                        pop_list.append(email)
-                for pop in pop_list:
-                    author_lcd_dict.pop(pop)
+                    author_lcd_dict.update({author_email: date})
+                    pop_list = []
+                    for email in author_lcd_dict.keys():
+                        if (date - author_lcd_dict[email]).total_seconds() > team_wd*60*60*24:
+                            pop_list.append(email)
+                    for pop in pop_list:
+                        author_lcd_dict.pop(pop)
 
-                wd_id = int((date - from_date).total_seconds())//(prod_wd*60*60*24)
-                if wd_id in prod_dict.keys():
-                    team_size = len(author_lcd_dict.keys())
-                    wd_commit = prod_dict[wd_id][1]+1
-                    wd_churn = prod_dict[wd_id][2]+commit.lines
-                    prod_dict.update({wd_id: [language[repo], wd_commit, wd_churn, team_size]})
-                else:
-                    team_size = len(author_lcd_dict.keys())
-                    prod_dict.update({wd_id: [language[repo], 1, commit.lines, team_size]})
+                    wd_id = int((date - from_date).total_seconds())//(prod_wd*60*60*24)
+                    if wd_id in prod_dict.keys():
+                        team_size = len(author_lcd_dict.keys())
+                        wd_commit = prod_dict[wd_id][1]+1
+                        wd_churn = prod_dict[wd_id][2]+commit.lines
+                        prod_dict.update({wd_id: [language[repo], wd_commit, wd_churn, team_size]})
+                    else:
+                        team_size = len(author_lcd_dict.keys())
+                        prod_dict.update({wd_id: [language[repo], 1, commit.lines, team_size]})
 
-            except Exception as error:
-                print('[Productivity] Unexpected Error ', error)
-
+                except Exception as error:
+                    print('[Productivity] Unexpected Error ', error)
+        except Exception as error:
+            print("Repository " + repo + " has been skipped due to unexpected error")
+            continue
         write_prod(repo, prod_dict)
         summary.update({repo: [from_date, end_date, commit_num, len(author_dict.keys()), language[repo]]})
         # write_authors(repo, author_dict)
@@ -110,7 +120,7 @@ def info_reader(_file):
             language[row[1]] = row[2]
 
             # For EZ test
-            if len(repo_list) >= 4:
+            if len(repo_list) >= 7:
                 break
 
     return repo_list, language
