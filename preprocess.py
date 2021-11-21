@@ -5,7 +5,7 @@ from git import Repo
 def cloner(url_list):
     for url in url_list:
         print("Cloning ", url[0])
-        Repo.clone_from(url=url[1], to_path="./repo_buffer/"+url[0])
+        Repo.clone_from(url=url[1], to_path="../repo_buffer/"+url[0])
 
 
 def read_csv(_file):

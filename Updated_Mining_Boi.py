@@ -6,9 +6,11 @@ from pydriller import Repository
 # Copied & modified
 def get_commit_prod(repo_list, language):
     # {repo: [from_date, end_date, commit_num, contributor_num]}
+    print("Going thru " + str(len(repo_list)) + " repos...")
+    count = 1
     summary = {}
     for repo in repo_list:
-        print('[Productivity] Mining repo: ', repo, '...')
+        print('('+str(count)+'/'+str(len(repo_list))+') ', '[Productivity] Mining repo: ', repo, '...')
         # for summary
         author_dict = {}
         commit_num = 0
@@ -76,6 +78,7 @@ def get_commit_prod(repo_list, language):
         write_prod(repo, prod_dict)
         summary.update({repo: [from_date, end_date, commit_num, len(author_dict.keys()), language[repo]]})
         # write_authors(repo, author_dict)
+        count += 1
     write_summary(summary)
 
 
@@ -110,6 +113,7 @@ def write_summary(summary):
 
 # Read CSV
 def info_reader(_file):
+    print("Reading " + _file + "...")
     repo_list = []
     language = {}
     with open(_file, "r") as f:
@@ -121,17 +125,17 @@ def info_reader(_file):
                 continue
             path = ""
             if row[4] == "True":
-                path = "./repo_buffer/" + row[0]
+                path = "../repo_buffer/" + row[0]
             else:
                 path = row[1]
             repo_list.append(path)
             language[path] = row[2]
 
             # For EZ test
-            # """
-            if len(repo_list) >= 10:
+            """
+            if len(repo_list) >= 3:
                 break
-            # """
+            """
 
     return repo_list, language
 
