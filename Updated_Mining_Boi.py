@@ -25,7 +25,7 @@ def get_commit_prod(repo_list, language):
         team_wd = 444
 
         is_first_commit = True
-        activate = False
+        negative_id_detected = False
         r = ""
         try:
             r = Repository(repo).traverse_commits()
@@ -69,6 +69,9 @@ def get_commit_prod(repo_list, language):
                     print('[Productivity] Unexpected Error ', error)
         except Exception as error:
             print("Repository " + repo + " has been skipped due to unexpected error")
+            continue
+        if negative_id_detected:
+            print("Repository " + repo + "skipped due to negative window id.")
             continue
         write_prod(repo, prod_dict)
         summary.update({repo: [from_date, end_date, commit_num, len(author_dict.keys()), language[repo]]})
@@ -116,12 +119,19 @@ def info_reader(_file):
             if line0:
                 line0 = False
                 continue
-            repo_list.append(row[1])
-            language[row[1]] = row[2]
+            path = ""
+            if row[4] == "True":
+                path = "./repo_buffer/" + row[0]
+            else:
+                path = row[1]
+            repo_list.append(path)
+            language[path] = row[2]
 
             # For EZ test
-            if len(repo_list) >= 7:
+            # """
+            if len(repo_list) >= 10:
                 break
+            # """
 
     return repo_list, language
 

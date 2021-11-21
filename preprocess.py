@@ -16,7 +16,7 @@ def read_csv(_file):
         if first_row:
             first_row = False
             continue
-        if bool(row[4]):
+        if row[4] == "True":
             over_size_list.append([row[0], row[1]])
     return over_size_list
 
@@ -24,6 +24,7 @@ def read_csv(_file):
 def main():
     with open("apache.csv", "r") as f:
         over_size_list = read_csv(f)
+    print("Downloading "+str(len(over_size_list))+" repos...")
     cloner(over_size_list)
 
 
