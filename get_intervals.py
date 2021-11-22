@@ -4,6 +4,19 @@ from datetime import datetime
 from pydriller import Repository
 
 
+class SimpleCommit:
+    def __init__(self, name, email, date):
+        self.name = name
+        self.email = email
+        self.date = date
+
+    def __lt__(self, com):
+        return self.date < com.date
+
+    def __le__(self, com):
+        return self.date <= com.date
+
+
 def get_intervals(repo_list):
     for repo in repo_list:
         print("Mining repo: ", repo, "...")
@@ -13,8 +26,14 @@ def get_intervals(repo_list):
         last_commit_date = datetime(1970, 1, 1, 0, 0, 0, 0)
 
         author_interval_dict = {}
+        r = []
         try:
-            r = Repository(repo).traverse_commits()
+            print("Collecting...")
+            temp_r = Repository(repo).traverse_commits()
+            for commit in temp_r:
+                r.append(SimpleCommit(commit.author.name, commit.author.email, commit.committer_date))
+            print("Sorting...")
+            r.sort()
         except Exception as error:
             print("[Pydriller] " + repo + " skipped due to unexpected error.", error)
             continue
@@ -22,7 +41,7 @@ def get_intervals(repo_list):
             for commit in r:
                 try:
                     # Get current commit date
-                    date = commit.committer_date
+                    date = commit.date
                     if is_first_commit:
                         last_commit_date = date
                         is_first_commit = False
@@ -30,8 +49,8 @@ def get_intervals(repo_list):
                     last_commit_date = date
 
                     # Remove alias of author name
-                    author_email = commit.author.email
-                    author_name = commit.author.name
+                    author_email = commit.email
+                    author_name = commit.name
                     email_segments = author_email.split('@')
                     name2 = author_email
                     if len(email_segments) > 0:
