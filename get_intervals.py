@@ -83,16 +83,22 @@ def get_intervals(repo_list):
         write_commit_intervals(repo, intervals)
 
 
-def read_repo_list(file_dir):
+def info_reader(_file):
+    print("Reading " + _file + "...")
     repo_list = []
-    with open(file_dir, newline='') as csv_file:
-        list_reader = csv.reader(csv_file)
-        index = 0
-        for row in list_reader:
-            if index != 0:
-                repo_list.append(row[1])
-            index += 1
-            # repo_list.append(row[1])
+    with open(_file, "r") as f:
+        scanner = csv.reader(f)
+        line0 = True
+        for row in scanner:
+            if line0:
+                line0 = False
+                continue
+            path = ""
+            if row[4] == "True":
+                path = "../repo_buffer/" + row[0]
+            else:
+                path = row[1]
+            repo_list.append(path)
     return repo_list
 
 
@@ -126,7 +132,7 @@ author_interval_file_path = 'test_author_intervals.csv'
 commit_interval_file_path = 'test_commit_intervals.csv'
 if __name__ == '__main__':
     print('Reading csv...')
-    repo_list = read_repo_list('test.csv')
+    repo_list = info_reader('apache.csv')
     print('Start to get interval list...')
     with open(author_interval_file_path, 'w', newline='') as csv_file:
         writer = csv.writer(csv_file)
