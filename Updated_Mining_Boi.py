@@ -3,9 +3,24 @@ from datetime import datetime
 from pydriller import Repository
 
 
+class SimpleCommit:
+    def __init__(self, author_email, author_name, lines, date):
+        self.author_email = author_email
+        self.author_name = author_name
+        self.lines = lines
+        self.date = date
+
+    def __lt__(self, com):
+        return self.date < com.date
+
+    def __le__(self, com):
+        return self.date <= com.date
+
+
 # Copied & modified
 def get_commit_prod(repo_list, language):
-    # {repo: [from_date, end_date, commit_num, contributor_num]}
+    # {repo: [from_date, end_date, commit_num, code_churn, contributor_num, Language]}
+    bad_repo = []
     print("Going thru " + str(len(repo_list)) + " repos...")
     count = 1
     summary = {}
@@ -24,22 +39,32 @@ def get_commit_prod(repo_list, language):
 
         wd_id = 0
         prod_wd = 7
-        team_wd = 444
+        team_wd = 503
 
         is_first_commit = True
         negative_id_detected = False
-        r = ""
+        r = []
         try:
-            r = Repository(repo).traverse_commits()
+            print("Collecting...")
+            for commit in Repository(repo).traverse_commits():
+                r.append(SimpleCommit(commit.author.email, commit.author.name, commit.lines, commit.committer_date))
+                if len(r) % 1000 == 0:
+                    print(len(r), "...")
+            print("Sorting...")
+            r.sort()
         except Exception as error:
             print("[Pydriller] " + repo + " skipped due to unexpected error.", error)
+            bad_repo.append(repo)
             continue
+
         try:
+            print("Analyzing...")
             for commit in r:
                 try:
-                    author_email = commit.author.email
-                    author_name = commit.author.name
-                    date = commit.committer_date
+                    author_email = commit.author_email
+                    author_name = commit.author_name
+                    date = commit.date
+                    lines = commit.lines
 
                     author_dict.update({author_email: author_name})
                     commit_num += 1
@@ -61,25 +86,28 @@ def get_commit_prod(repo_list, language):
                     if wd_id in prod_dict.keys():
                         team_size = len(author_lcd_dict.keys())
                         wd_commit = prod_dict[wd_id][1]+1
-                        wd_churn = prod_dict[wd_id][2]+commit.lines
+                        wd_churn = prod_dict[wd_id][2]+lines
                         prod_dict.update({wd_id: [language[repo], wd_commit, wd_churn, team_size]})
                     else:
                         team_size = len(author_lcd_dict.keys())
-                        prod_dict.update({wd_id: [language[repo], 1, commit.lines, team_size]})
+                        prod_dict.update({wd_id: [language[repo], 1, lines, team_size]})
 
                 except Exception as error:
                     print('[Productivity] Unexpected Error ', error)
         except Exception as error:
             print("Repository " + repo + " has been skipped due to unexpected error")
+            bad_repo.append(repo)
             continue
         if negative_id_detected:
             print("Repository " + repo + "skipped due to negative window id.")
+            bad_repo.append(repo)
             continue
         write_prod(repo, prod_dict)
         summary.update({repo: [from_date, end_date, commit_num, len(author_dict.keys()), language[repo]]})
         # write_authors(repo, author_dict)
         count += 1
     write_summary(summary)
+    return bad_repo
 
 
 # Copied & modified
@@ -132,10 +160,10 @@ def info_reader(_file):
             language[path] = row[2]
 
             # For EZ test
-            """
-            if len(repo_list) >= 3:
+            # """
+            if len(repo_list) >= 10:
                 break
-            """
+            # """
 
     return repo_list, language
 
@@ -145,7 +173,13 @@ def main():
     with open("zz_prod2.csv", "w") as prod_csv:
         prod_csv_writer = csv.writer(prod_csv)
         prod_csv_writer.writerow(['Repository', "Language", 'WindowID', 'NCommits', 'Code_Churn', 'TeamSize'])
-    get_commit_prod(repo_list, language)
+    bad_repo = get_commit_prod(repo_list, language)
+    if len(bad_repo) > 0:
+        with open("bad_repo.csv", "w") as f:
+            cw = csv.writer(f)
+            cw.writerow(["Bad repo path"])
+            for path in bad_repo:
+                cw.writerow([path])
 
 
 if __name__ == "__main__":

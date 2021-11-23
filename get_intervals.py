@@ -4,6 +4,19 @@ from datetime import datetime
 from pydriller import Repository
 
 
+class SimpleCommit:
+    def __init__(self, name, email, date):
+        self.name = name
+        self.email = email
+        self.date = date
+
+    def __lt__(self, com):
+        return self.date < com.date
+
+    def __le__(self, com):
+        return self.date <= com.date
+
+
 def get_intervals(repo_list):
     for repo in repo_list:
         print("Mining repo: ", repo, "...")
@@ -13,8 +26,14 @@ def get_intervals(repo_list):
         last_commit_date = datetime(1970, 1, 1, 0, 0, 0, 0)
 
         author_interval_dict = {}
+        r = []
         try:
-            r = Repository(repo).traverse_commits()
+            print("Collecting...")
+            temp_r = Repository(repo).traverse_commits()
+            for commit in temp_r:
+                r.append(SimpleCommit(commit.author.name, commit.author.email, commit.committer_date))
+            print("Sorting...")
+            r.sort()
         except Exception as error:
             print("[Pydriller] " + repo + " skipped due to unexpected error.", error)
             continue
@@ -22,7 +41,7 @@ def get_intervals(repo_list):
             for commit in r:
                 try:
                     # Get current commit date
-                    date = commit.committer_date
+                    date = commit.date
                     if is_first_commit:
                         last_commit_date = date
                         is_first_commit = False
@@ -30,8 +49,8 @@ def get_intervals(repo_list):
                     last_commit_date = date
 
                     # Remove alias of author name
-                    author_email = commit.author.email
-                    author_name = commit.author.name
+                    author_email = commit.email
+                    author_name = commit.name
                     email_segments = author_email.split('@')
                     name2 = author_email
                     if len(email_segments) > 0:
@@ -64,16 +83,22 @@ def get_intervals(repo_list):
         write_commit_intervals(repo, intervals)
 
 
-def read_repo_list(file_dir):
+def info_reader(_file):
+    print("Reading " + _file + "...")
     repo_list = []
-    with open(file_dir, newline='') as csv_file:
-        list_reader = csv.reader(csv_file)
-        index = 0
-        for row in list_reader:
-            if index != 0:
-                repo_list.append(row[1])
-            index += 1
-            # repo_list.append(row[1])
+    with open(_file, "r") as f:
+        scanner = csv.reader(f)
+        line0 = True
+        for row in scanner:
+            if line0:
+                line0 = False
+                continue
+            path = ""
+            if row[4] == "True":
+                path = "../repo_buffer/" + row[0]
+            else:
+                path = row[1]
+            repo_list.append(path)
     return repo_list
 
 
@@ -107,7 +132,7 @@ author_interval_file_path = 'test_author_intervals.csv'
 commit_interval_file_path = 'test_commit_intervals.csv'
 if __name__ == '__main__':
     print('Reading csv...')
-    repo_list = read_repo_list('test.csv')
+    repo_list = info_reader('apache.csv')
     print('Start to get interval list...')
     with open(author_interval_file_path, 'w', newline='') as csv_file:
         writer = csv.writer(csv_file)
