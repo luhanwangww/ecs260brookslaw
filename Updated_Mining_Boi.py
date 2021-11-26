@@ -39,7 +39,7 @@ def get_commit_prod(repo_list, language):
 
         wd_id = 0
         prod_wd = 7
-        team_wd = 503
+        team_wd = 525
 
         is_first_commit = True
         negative_id_detected = False
@@ -160,10 +160,10 @@ def info_reader(_file):
             language[path] = row[2]
 
             # For EZ test
-            # """
+            """
             if len(repo_list) >= 10:
                 break
-            # """
+            """
 
     return repo_list, language
 
@@ -175,6 +175,7 @@ def main():
         prod_csv_writer.writerow(['Repository', "Language", 'WindowID', 'NCommits', 'Code_Churn', 'TeamSize'])
     bad_repo = get_commit_prod(repo_list, language)
     if len(bad_repo) > 0:
+        print(str(len(bad_repo)) + " skipped repo appeared.")
         with open("bad_repo.csv", "w") as f:
             cw = csv.writer(f)
             cw.writerow(["Bad repo path"])
