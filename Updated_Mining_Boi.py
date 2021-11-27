@@ -4,11 +4,13 @@ from pydriller import Repository
 
 
 class SimpleCommit:
-    def __init__(self, author_email, author_name, lines, date):
+    def __init__(self, commit_hash, author_email, author_name, lines, date, is_release):
+        self.commit_hash = commit_hash
         self.author_email = author_email
         self.author_name = author_name
         self.lines = lines
         self.date = date
+        self.is_release = is_release
 
     def __lt__(self, com):
         return self.date < com.date
@@ -18,12 +20,11 @@ class SimpleCommit:
 
 
 # Copied & modified
-def get_commit_prod(repo_list, language):
+def get_release_interval(repo_list, language):
     # {repo: [from_date, end_date, commit_num, code_churn, contributor_num, Language]}
     bad_repo = []
     print("Going thru " + str(len(repo_list)) + " repos...")
     count = 1
-    summary = {}
     for repo in repo_list:
         print('('+str(count)+'/'+str(len(repo_list))+') ', '[Productivity] Mining repo: ', repo, '...')
         # for summary
@@ -36,18 +37,24 @@ def get_commit_prod(repo_list, language):
         author_lcd_dict = {}
         # productivity dict {repo_name: [wd_id, prod_in_prod_wd, team_size]}
         prod_dict = {}
+        release_dict = {}
 
-        wd_id = 0
         prod_wd = 7
         team_wd = 525
 
         is_first_commit = True
         negative_id_detected = False
         r = []
+        release_hash_list = []
         try:
+            print("Collecting Release...")
+            for commit in Repository(repo, only_releases=True).traverse_commits():
+                release_hash_list.append(commit.hash)
+
             print("Collecting...")
             for commit in Repository(repo).traverse_commits():
-                r.append(SimpleCommit(commit.author.email, commit.author.name, commit.lines, commit.committer_date))
+                is_release = commit.hash in release_hash_list
+                r.append(SimpleCommit(commit.hash, commit.author.email, commit.author.name, commit.lines, commit.committer_date, is_release))
                 if len(r) % 1000 == 0:
                     print(len(r), "...")
             print("Sorting...")
@@ -59,14 +66,17 @@ def get_commit_prod(repo_list, language):
 
         try:
             print("Analyzing...")
+            ###
+            last_release_date = r[0].date
             for commit in r:
                 try:
                     author_email = commit.author_email
                     author_name = commit.author_name
                     date = commit.date
                     lines = commit.lines
+                    ####
+                    is_release = commit.is_release
 
-                    author_dict.update({author_email: author_name})
                     commit_num += 1
                     end_date = date
 
@@ -74,11 +84,21 @@ def get_commit_prod(repo_list, language):
                         from_date = date
                         is_first_commit = False
 
-                    author_lcd_dict.update({author_email: date})
+                    email_segments = author_email.split('@')
+                    name2 = author_email
+                    if len(email_segments) > 0:
+                        name2 = email_segments[0].replace('.', '').lower()
+                    name1 = author_name.replace(' ', '').lower()
+                    name = name1
+                    if name2 in author_lcd_dict.keys():
+                        name = name2
+                    author_lcd_dict.update({name: date})
+                    author_dict.update({name: author_email})
+
                     pop_list = []
-                    for email in author_lcd_dict.keys():
-                        if (date - author_lcd_dict[email]).total_seconds() > team_wd*60*60*24:
-                            pop_list.append(email)
+                    for name in author_lcd_dict.keys():
+                        if (date - author_lcd_dict[name]).total_seconds() > team_wd*60*60*24:
+                            pop_list.append(name)
                     for pop in pop_list:
                         author_lcd_dict.pop(pop)
 
@@ -92,10 +112,16 @@ def get_commit_prod(repo_list, language):
                         team_size = len(author_lcd_dict.keys())
                         prod_dict.update({wd_id: [language[repo], 1, lines, team_size]})
 
+                    # Record release intervals
+                    if is_release:
+                        release_interval = (date - last_release_date).total_seconds()
+                        last_release_date = date
+                        release_dict.update({commit.commit_hash: [language[repo], wd_id, release_interval, team_size]})
+
                 except Exception as error:
                     print('[Productivity] Unexpected Error ', error)
         except Exception as error:
-            print("Repository " + repo + " has been skipped due to unexpected error")
+            print("Repository " + repo + " has been skipped due to unexpected error: ", error)
             bad_repo.append(repo)
             continue
         if negative_id_detected:
@@ -103,10 +129,11 @@ def get_commit_prod(repo_list, language):
             bad_repo.append(repo)
             continue
         write_prod(repo, prod_dict)
-        summary.update({repo: [from_date, end_date, commit_num, len(author_dict.keys()), language[repo]]})
+        write_releases(repo, release_dict)
         # write_authors(repo, author_dict)
         count += 1
-    write_summary(summary)
+        summary = [from_date, end_date, commit_num, len(author_dict.keys()), language[repo], len(release_hash_list)]
+        write_summary(repo, summary)
     return bad_repo
 
 
@@ -114,7 +141,7 @@ def get_commit_prod(repo_list, language):
 def write_prod(repo, prod_dict):
     try:
         print('prod writer start')
-        with open('zz_prod2.csv', 'a', newline='') as csv_file:
+        with open(prod_csv_path, 'a', newline='') as csv_file:
             writer = csv.writer(csv_file)
             for wd_id in prod_dict.keys():
                 writer.writerow([repo, prod_dict[wd_id][0], wd_id, prod_dict[wd_id][1],
@@ -124,16 +151,27 @@ def write_prod(repo, prod_dict):
         print('Unexpected Error when writing prod for ', repo, e_msg)
 
 
+def write_releases(repo, release_dict):
+    try:
+        print('release writer start')
+        with open(release_csv_path, 'a', newline='') as csv_file:
+            writer = csv.writer(csv_file)
+            for commit_hash in release_dict.keys():
+                # language, wd_id, release_interval, team_size
+                writer.writerow([repo, commit_hash, release_dict[commit_hash][0], release_dict[commit_hash][1],
+                                 release_dict[commit_hash][2], release_dict[commit_hash][3]])
+        print('prod writer complete')
+    except Exception as e_msg:
+        print('Unexpected Error when writing prod for ', repo, e_msg)
+
+
 # Plagiarized. Nah, copied XD.
-def write_summary(summary):
+def write_summary(repo, summary):
     try:
         print('summary writer start')
-        with open('zz_summary2.csv', 'w', newline='') as csv_file:
+        with open(summary_csv_path, 'a', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(['Repository', 'From Date', 'End Date', 'NCommit', 'NContributor', "Language"])
-            for repo in summary.keys():
-                writer.writerow([repo, summary[repo][0], summary[repo][1], summary[repo][2],
-                                 summary[repo][3], summary[repo][4]])
+            writer.writerow([repo, summary[0], summary[1], summary[2], summary[3], summary[4], summary[5]])
         print('summary writer complete')
     except Exception as e_msg:
         print('Unexpected Error when writing summary for ', repo, e_msg)
@@ -168,15 +206,29 @@ def info_reader(_file):
     return repo_list, language
 
 
+repo_csv_path = "test.csv"
+prod_csv_path = 'test_prod.csv'
+release_csv_path = 'test_release.csv'
+summary_csv_path = 'test_summary.csv'
+bad_repo_csv_path = "test_bad_repo.csv"
+
+
 def main():
-    repo_list, language = info_reader("apache.csv")
-    with open("zz_prod2.csv", "w") as prod_csv:
+    repo_list, language = info_reader(repo_csv_path)
+    with open(prod_csv_path, "w", newline='') as prod_csv:
         prod_csv_writer = csv.writer(prod_csv)
         prod_csv_writer.writerow(['Repository', "Language", 'WindowID', 'NCommits', 'Code_Churn', 'TeamSize'])
-    bad_repo = get_commit_prod(repo_list, language)
+    with open(release_csv_path, "w", newline='') as release_csv:
+        prod_csv_writer = csv.writer(release_csv)
+        prod_csv_writer.writerow(['Repository', 'Hash', 'Language', 'WindowID', 'ReleaseInterval', 'TeamSize'])
+    with open(summary_csv_path, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(['Repository', 'From Date', 'End Date', 'NCommit', 'NContributor', "Language", 'NRelease'])
+
+    bad_repo = get_release_interval(repo_list, language)
     if len(bad_repo) > 0:
         print(str(len(bad_repo)) + " skipped repo appeared.")
-        with open("bad_repo.csv", "w") as f:
+        with open(bad_repo_csv_path, "w", newline='') as f:
             cw = csv.writer(f)
             cw.writerow(["Bad repo path"])
             for path in bad_repo:
